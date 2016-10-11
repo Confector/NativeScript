@@ -77,6 +77,10 @@ class IOSApplication implements definition.iOSApplication {
         this.addNotificationObserver(UIDeviceOrientationDidChangeNotification, this.orientationDidChange.bind(this));
     }
 
+    get window(): Window {
+        return this._window;
+    }
+
     get nativeApp(): UIApplication {
         return utils.ios.getter(UIApplication, UIApplication.sharedApplication);
     }
@@ -106,60 +110,7 @@ class IOSApplication implements definition.iOSApplication {
     }
 
     private didFinishLaunchingWithOptions(notification: NSNotification) {
-        this._window = <Window>Window.alloc().initWithFrame(utils.ios.getter(UIScreen, UIScreen.mainScreen).bounds);
-        this._window.backgroundColor = utils.ios.getter(UIColor, UIColor.whiteColor);
-
-        if (typedExports.onLaunch) {
-            typedExports.onLaunch(undefined);
-        }
-
-        let args: definition.LaunchEventData = {
-            eventName: typedExports.launchEvent,
-            object: this,
-            ios: notification.userInfo && notification.userInfo.objectForKey("UIApplicationLaunchOptionsLocalNotificationKey") || null
-        };
-
-        typedExports.notify(args);
-
-        let rootView = args.root;
-        let frame: Frame;
-        let navParam: Object;
-        if (!rootView) {
-            // try to navigate to the mainEntry/Module (if specified)
-            navParam = typedExports.mainEntry;
-            if (!navParam) {
-                navParam = typedExports.mainModule;
-            }
-
-            if (navParam) {
-                frame = new Frame();
-                frame.navigate(navParam);
-            } else {
-                // TODO: Throw an exception?
-                throw new Error("A Frame must be used to navigate to a Page.");
-            }
-
-            rootView = frame;
-        }
-
-        this._window.content = rootView;
-
-        if (rootView instanceof Frame) {
-            this.rootController = this._window.rootViewController = rootView.ios.controller;
-        }
-        else if (rootView.ios instanceof UIViewController) {
-            this.rootController = this._window.rootViewController = rootView.ios;
-        }
-        else if (rootView.ios instanceof UIView) {
-            let newController = UIViewController.new();
-            newController.view.addSubview(rootView.ios);
-            this.rootController = newController;
-        }
-        else {
-            throw new Error("Root should be either UIViewController or UIView");
-        }
-
-        this._window.makeKeyAndVisible();
+        this.createWindow(notification);
     }
 
     private didBecomeActive(notification: NSNotification) {
@@ -226,6 +177,62 @@ class IOSApplication implements definition.iOSApplication {
         }
     }
 
+    public createWindow(notification?: NSNotification) {
+        this._window = <Window>Window.alloc().initWithFrame(utils.ios.getter(UIScreen, UIScreen.mainScreen).bounds);
+        this._window.backgroundColor = utils.ios.getter(UIColor, UIColor.whiteColor);
+
+        if (typedExports.onLaunch) {
+            typedExports.onLaunch(undefined);
+        }
+
+        let args: definition.LaunchEventData = {
+            eventName: typedExports.launchEvent,
+            object: this,
+            ios: notification && notification.userInfo && notification.userInfo.objectForKey("UIApplicationLaunchOptionsLocalNotificationKey") || null
+        };
+
+        typedExports.notify(args);
+
+        let rootView = args.root;
+        let frame: Frame;
+        let navParam: Object;
+        if (!rootView) {
+            // try to navigate to the mainEntry/Module (if specified)
+            navParam = typedExports.mainEntry;
+            if (!navParam) {
+                navParam = typedExports.mainModule;
+            }
+
+            if (navParam) {
+                frame = new Frame();
+                frame.navigate(navParam);
+            } else {
+                // TODO: Throw an exception?
+                throw new Error("A Frame must be used to navigate to a Page.");
+            }
+
+            rootView = frame;
+        }
+
+        this._window.content = rootView;
+
+        if (rootView instanceof Frame) {
+            this.rootController = this._window.rootViewController = rootView.ios.controller;
+        }
+        else if (rootView.ios instanceof UIViewController) {
+            this.rootController = this._window.rootViewController = rootView.ios;
+        }
+        else if (rootView.ios instanceof UIView) {
+            let newController = UIViewController.new();
+            newController.view.addSubview(rootView.ios);
+            this.rootController = newController;
+        }
+        else {
+            throw new Error("Root should be either UIViewController or UIView");
+        }
+
+        this._window.makeKeyAndVisible();       
+    }
 }
 
 var iosApp = new IOSApplication();
@@ -267,7 +274,15 @@ typedExports.start = function (entry?: NavigationEntry) {
         }
         started = true;
         loadCss();
-        UIApplicationMain(0, null, null, typedExports.ios && typedExports.ios.delegate ? NSStringFromClass(typedExports.ios.delegate) : NSStringFromClass(Responder));
+
+        if(!iosApp.window) {
+            // Create window if not created (existing iOS integration app support). 
+            iosApp.createWindow();
+        } else {
+            // Normal NativeScript app will need UIApplicationMain. 
+            UIApplicationMain(0, null, null, typedExports.ios && typedExports.ios.delegate ? NSStringFromClass(typedExports.ios.delegate) : NSStringFromClass(Responder));
+        }
+
     } else {
         throw new Error("iOS Application already started!");
     }
